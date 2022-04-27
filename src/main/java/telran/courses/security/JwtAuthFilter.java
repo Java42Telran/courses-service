@@ -29,6 +29,7 @@ static Logger LOG = LoggerFactory.getLogger(JwtAuthFilter.class);
 			FilterChain filterChain)
 			throws ServletException, IOException {
 		LOG.trace("filter with header {}", request.getHeader("Authorization"));
+		
 		String jwt = parseJwt(request);
 		if (jwt != null) {
 			String username = jwtUtils.validate(jwt);
@@ -36,8 +37,10 @@ static Logger LOG = LoggerFactory.getLogger(JwtAuthFilter.class);
 				UserDetails user = userDetailsService.loadUserByUsername(username);
 				UsernamePasswordAuthenticationToken authentication =
 						new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-				authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+				
 				SecurityContextHolder.getContext().setAuthentication(authentication);
+			} else {
+				SecurityContextHolder.getContext().setAuthentication(null);
 			}
 		}
 		filterChain.doFilter(request, response);

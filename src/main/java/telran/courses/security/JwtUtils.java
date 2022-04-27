@@ -18,7 +18,7 @@ public class JwtUtils {
 	static Logger LOG = LoggerFactory.getLogger(JwtUtils.class);
 	@Value("${app.exiration.minutes: 60}")
 	long expPeriodMin;
-	@Value("{app.jwt.secret:x}")
+	@Value("${app.jwt.secret}")
 	String secret;
 	/**
 	 * 

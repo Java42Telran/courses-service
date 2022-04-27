@@ -23,6 +23,7 @@ public class CoursesServiceImpl implements CoursesService, Serializable{
 private static final int MILLIS_IN_MINUTE = 60000;
 @Value("${app.interval.minutes: 1}")
 	int interval;
+   boolean flUpdate = false;
 	static Logger LOG = LoggerFactory.getLogger(CoursesService.class);
 	
 	@Value("${app.file.name: courses.data}")
@@ -34,7 +35,7 @@ private static final int MILLIS_IN_MINUTE = 60000;
 	public  Course addCourse(Course course) {
 	    course.id = generateId();
 	    Course res = add(course);
-	   
+	    flUpdate = true;
 	    return res;
 	}
 
@@ -83,6 +84,7 @@ private static final int MILLIS_IN_MINUTE = 60000;
 		if (course == null){
 			throw new ResourceNotFoundException(String.format("course with id %d not found", id));
 		}
+		flUpdate = true;
 		return course;
 	}
 
@@ -93,14 +95,15 @@ private static final int MILLIS_IN_MINUTE = 60000;
 		if (courseUpdated == null){
 			throw new ResourceNotFoundException(String.format("course with id %d not found", id));
 		}
+		flUpdate = true;
 		return courseUpdated;
 	}
 
 	
 	private void restore() {
 		try(ObjectInputStream input = new ObjectInputStream(new FileInputStream(fileName))){
-			CoursesServiceImpl coursesRestored = (CoursesServiceImpl) input.readObject();
-			courses = coursesRestored.courses;
+			Map<Integer, Course> coursesRestored = (Map<Integer, Course>) input.readObject();
+			courses = coursesRestored;
 			LOG.debug("service has been restored from file {}", fileName);
 			
 		} catch(FileNotFoundException e) {
@@ -108,35 +111,48 @@ private static final int MILLIS_IN_MINUTE = 60000;
 			
 		} 
 		catch (Exception e) {
-			throw new RuntimeException(e.getMessage());
+			LOG.warn("service has not been restored by nested exception {} ", e.toString());
 		}
 		
 	}
 
 	
-	private void save() {
-		try(ObjectOutputStream output =
-				new ObjectOutputStream(new FileOutputStream(fileName))) {
-			output.writeObject(this);
-			
-		} catch (Exception e) {
-			throw new RuntimeException(e.getMessage());
+	private boolean save() {
+		
+		if (flUpdate) {
+			try(ObjectOutputStream output =
+					new ObjectOutputStream(new FileOutputStream(fileName))) {
+					output.writeObject(courses);
+					flUpdate = false;
+					return true;
+				
+			} catch (Exception e) {
+				throw new RuntimeException(e.getMessage());
+			}
 		}
+		return false; 
+		
 		
 	}
 	@PostConstruct
 	void restoreInvocation() {
 		restore();
 		Thread thread = new Thread(() -> {
+			LOG.debug("Thread {} created ", Thread.currentThread().getName());
+			boolean isSaved = false;
 			while(true) {
 				try {
 					Thread.sleep(interval * MILLIS_IN_MINUTE);
-					save();
+					isSaved = save();
 				} catch (InterruptedException e) {
 					
 				}
+				if (isSaved) {
+					LOG.debug("courses data saved into file {}", fileName);
+				} else {
+					LOG.debug("courses have not been updated, no saved");
+				}
 				
-				LOG.debug("courses data saved into file {}", fileName);
 			}
 			
 		});
@@ -145,8 +161,13 @@ private static final int MILLIS_IN_MINUTE = 60000;
 	}
 	@PreDestroy
 	void persistCoursesData() {
-		save();
-		LOG.debug("courses data saved into file {}", fileName);
+		boolean isSaved = save();
+		
+		if (isSaved) {
+			LOG.debug("courses data saved into file {}", fileName);
+		} else {
+			LOG.debug("courses have not been updated, no saved");
+		}
 		
 	}
 	}
